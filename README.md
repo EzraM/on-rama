@@ -314,7 +314,7 @@ The shape of the pstate structure is largely up to us. The first one we'll make 
 This is a lookup where, if we know someone's user-id, we can get their username. We declare a pstate inside of a module and topology.
 
 ```clojure
-(let [s (rama/stream-topology )]
+(let [s (rama/stream-topology topologies "users")]
   (declare-pstate s $$usernames {Long ; user-id
     String ; username
     }))
