@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :deps {com.rpl/rama {:mvn/version "0.11.0"}
+        com.rpl/rama-helpers {:mvn/version "0.9.0"}}
+ :mvn/repos {"nexus-releases" {:url "https://nexus.redplanetlabs.com/repository/maven-public-releases"}}}
