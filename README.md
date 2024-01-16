@@ -1,6 +1,6 @@
 # On Rama
 
-My first thought after learning about Rama was, "this is aimed at me."
+My first thought after learning about [Rama](https://redplanetlabs.com/docs/~/clj-defining-modules.html) was, "this is aimed at me."
 After reading through some of the docs, my thought was "I have got this."
 After coding for awhile, it was, "yeah, I've mostly got this."
 After coding a bit longer, I thought, "wow, this learning curve is steep."
