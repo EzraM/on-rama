@@ -22,16 +22,16 @@ In this section, we'll look at the strengths and shortcomings of that system. No
 
 There is a function called `reduce` that captures the idea of event-sourcing. Here's how reduce works in Javascript:
 
-```
-const events = [{user: 'Jim'}, {user: 'Jane'}, {user: 'Joanna'}]
+```javascript
+const events = [{ user: "Jim" }, { user: "Jane" }, { user: "Joanna" }];
 // function that takes an event and projects it into a state
-const reducer = (state, event) => [...state, event.user]
+const reducer = (state, event) => [...state, event.user];
 
 // reduce begins by calling the reducer function with startingState and the first event
 // the result of this is the next state, which is used when we call the function again along with the next event
 // reduce continues updating the state based on events until there are no more events left, and then returns a result
-const startingState = []
-const state = events.reduce(reducer, startingState)
+const startingState = [];
+const state = events.reduce(reducer, startingState);
 // state is ['Jim', 'Jane', 'Joanna']
 ```
 
@@ -117,7 +117,7 @@ deps.edn
 
 src/on_rama/events.clj
 
-```
+```clojure
 (ns on-rama.events
   (:require [com.rpl.rama :as rama]
             [com.rpl.rama.test :as rtest]))
@@ -131,7 +131,7 @@ Start the repl using Calva jack-in and select deps.edn.
 
 Data enters Rama as events. In the Clojure examples from Red Planet Labs, the shape of an event is often defined this way:
 
-```
+```clojure
 (defrecord AddUser [user-id])
 ```
 
@@ -141,7 +141,7 @@ A module is what gets deployed to a rama cluster. Modules have some ownership of
 
 We will define a module with one depot.
 
-```
+```clojure
 (rama/defmodule WriteEventModule [setup topologies]
   (rama/declare-depot setup *users (rama/hash-by :user-id)))
 ```
@@ -169,7 +169,7 @@ So Rama draws our attention to the idea of partitioning on line 2 of our first p
 
 So now, with a little fanfare, we are ready to run the module and write the event to the depot.
 
-```
+```clojure
 ;; Run a module, write the event
 (with-open [ipc (rtest/create-ipc)]
     (rtest/launch-module! ipc WriteEventModule {:tasks 4 :threads 2})
@@ -183,7 +183,7 @@ When you append a Clojure record to a depot, Rama will use nippy to serialize th
 
 To get a feel for events, lets add another event, now with a different field:
 
-```
+```clojure
 (rama/foreign-append! log {:user-id 2 :status :active})
 ```
 
@@ -197,7 +197,7 @@ We've covered writing an event, but how do you read it?
 
 To read events requires setting up a topology within the module. A topology is a like a highway map that covers the flow of data from a depot to all of the places it is used downstream.
 
-```
+```clojure
 (let [s (rama/stream-topology topologies "users")])
 ```
 
@@ -207,7 +207,7 @@ Rama Dataflow is a language built on top of Clojure with its own variable bindin
 
 But first, to read from a depot, use the `source>` function.
 
-```
+```clojure
 (rama/defmodule ReadEventModule [setup topologies]
   (rama/declare-depot setup *users (rama/hash-by :user-id))
 
@@ -231,7 +231,7 @@ Note, when destructuring, the name of the field we assign to has a `*` at the fr
 
 Run the module to see the logs.
 
-```
+```clojure
 (with-open [ipc (rtest/create-ipc)]
   (rtest/launch-module! ipc ReadEventModule {:tasks 4 :threads 2})
   (let [module-name (rama/get-module-name ReadEventModule)
@@ -250,7 +250,7 @@ A quick way to enter Dataflow-land is through the Rama function `?<-`.
 
 A quick check that the regular Clojure function `println` works as you'd expect is to run:
 
-```
+```clojure
 (?<- (println "Hello!"))
 ```
 
@@ -258,7 +258,7 @@ The `println` function is used for side effects. It takes input, in this case a 
 
 When we have a function and we want to do something with the output, we can use the emit token, `:>`:
 
-```
+```clojure
 (?<-
   (inc 5 :> *six)
   (println *six))
@@ -270,11 +270,11 @@ A common pattern in Rama is to get a stream of events from a depot, and do somet
 
 Ops are in this namespace:
 
-```
+```clojure
 [com.rpl.rama.ops :as ops]
 ```
 
-```
+```clojure
 (?<-
  ;; emit each user record one at a time, destructuring the user-id
  (ops/explode [{:user-id 1} {:user-id 2} {:user-id 3}] :> {:keys [*user-id]})
@@ -283,7 +283,7 @@ Ops are in this namespace:
 
 In this contrived example, we run a Clojure function for each of our events, then capture the output emitted by that Clojure function into a new Dataflow variable:
 
-```
+```clojure
 (?<-
  (ops/explode [{:user-id 1} {:user-id 2} {:user-id 3}] :> {:keys [*user-id]})
  (inc *user-id :> *inc-user-id)
@@ -307,13 +307,13 @@ We use Dataflow language to read the events we want, and transform them into the
 The shape of the pstate structure is largely up to us. The first one we'll make is map of user id's to usernames, declared as a map of a Long to a String:
 
 ```
-{Long ; user-id
+{ Long ; user-id
   String ; username }
 ```
 
 This is a lookup where, if we know someone's user-id, we can get their username. We declare a pstate inside of a module and topology.
 
-```
+```clojure
 (let [s (rama/stream-topology )]
   (declare-pstate s $$usernames {Long ; user-id
     String ; username
@@ -322,7 +322,7 @@ This is a lookup where, if we know someone's user-id, we can get their username.
 
 Then we can write to the pstate using Dataflow code. First, we call `(<<sources s)` to tell Rama that we're writing Dataflow. Then, we `source>` from a depot, emitting each event into a new variable. This looks like so:
 
-```
+```clojure
 (<<sources s
   (source> *users :> *user))
 ```
@@ -354,13 +354,13 @@ CSS and jQuery, if you squint, use similar schemes for navigating.
 
 A path that writes into a data structure navigates to a spot and then makes a change. A simple change is to set a value. To do that, we use a function called `termval`.
 
-```
+```clojure
 [(keypath 2) (termval "alexander-the-great")]
 ```
 
 In our case, we want to write to the user-id key with the value username. The Dataflow snippet to read events from a depot and then write to a pstate looks like this:
 
-```
+```clojure
 (<<sources s
           (source> *users :> {:keys [*user-id *username]})
           (local-transform> [(path/keypath *user-id) (path/termval *username)] $$usernames))
@@ -368,7 +368,7 @@ In our case, we want to write to the user-id key with the value username. The Da
 
 Once a value is in a pstate, we can get it from outside of Rama and Dataflow-land using functions like foreign-select-one. Here, usernames is a reference to the pstate from an instance of the running module.
 
-```
+```clojure
 (rama/foreign-select-one (keypath 1) usernames)
 ```
 
@@ -384,7 +384,7 @@ We use the `set-schema` function to say "this is a set of Long's", and then use 
 
 To add an element to a set, there are a few navigators used.
 
-```
+```clojure
 (rama/local-transform> [(path/keypath *swing) path/NIL->SET path/NONE-ELEM (path/termval *kid)] $$swing-sessions)
 ```
 
@@ -399,7 +399,7 @@ So now we have a set that should have a value in it. The next question becomes, 
 
 We can use a query that looks like this:
 
-```
+```clojure
 (<<query-topology topologies "kid-used-swing?"
                   ;; queries take inputs and emit results.
                   [*kid *swing :> *used-swing?]
