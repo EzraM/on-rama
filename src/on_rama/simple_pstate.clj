@@ -12,17 +12,17 @@
   (rama/declare-depot setup *users (rama/hash-by :user-id))
 
 
-  (let [s (rama/stream-topology)]
-    (declare-pstate s $$usernames {Long ; user-id
-                                   String ; username
-                                   })
+  (let [s (rama/stream-topology topologies "users")]
+    (rama/declare-pstate s $$usernames {Long ; user-id
+                                        String ; username
+                                        })
 
     (rama/<<sources s
                     (rama/source> *users :> {:keys [*user-id *username]})
                     (rama/local-transform> [(path/keypath *user-id) (path/termval *username)] $$usernames))))
 
 ;; Run a module, write an event, add to a PState, then read from the PState
-(test/deftest []
+(test/deftest write-pstate []
   (with-open [ipc (rtest/create-ipc)]
     (rtest/launch-module! ipc WritePStateModule {:tasks 4 :threads 2})
     (let [module-name (rama/get-module-name WritePStateModule)
@@ -32,3 +32,6 @@
       (rama/foreign-append! log (->AddUser 2 "Helene"))
 
       (= (rama/foreign-select-one (path/keypath 1) usernames) "Alex"))))
+
+(comment
+  (write-pstate))
