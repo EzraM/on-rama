@@ -5,7 +5,8 @@
             [clojure.test :as test]))
 
 ;; Sets with Rama turned out to be tricky, so this goes through making a PState to hold a set,
-;; adding a value to the set, and writing query to check that a given value is in a set.
+;; adding a value to the set, and running a contains? check from a view function to check if
+;; a value is in the set
 
 ;; Our events will be kids taking turns on a swing-set. Get it?
 (defrecord Session [kid swing])
@@ -19,46 +20,37 @@
     (rama/declare-pstate s $$swing-sessions {Long ; swing
                                              (rama/set-schema Long ; kid
                                                               {:subindex? true})})
-
-    ;; Checking if a value is in a set:
-    (rama/<<query-topology topologies "kid-used-swing?"
-                           ;; queries take inputs and emit results.
-                           [*kid *swing :> *used-swing?]
-                           ;; this data is partitioned by the swing, so we go to the partition
-                           ;; of the swing we are interested in.
-                           (rama/|hash *swing)
-                           ;; this is an anonymous function that will be called as part of the path.
-                           ;; the argument to the function is the set of kids who used the swing, pulled from the pstate.
-                           ;; we use the baked-in contains? function from Clojure to check if the kid we're interested
-                           ;; in is in this set, and emit the answer.
-                           (rama/<<ramafn %had-kid [*kids]
-                                          (:> (contains? *kids *kid)))
-                           ;; this path resolves with a view that a emits of a boolean of whether or not a kid used the swing.
-                           (rama/local-select> [(path/keypath *swing) (path/view %had-kid)] $$swing-sessions :> *used-swing?)
-                           ;; all queries must, as their last operation, relocate computation to the partition where the query started.
-                           (rama/|origin))
-
     (rama/<<sources s
                     (rama/source> *sessions :> {:keys [*kid *swing]})
                     (rama/|hash *swing)
-                    (rama/local-transform> [(path/keypath *swing) path/NIL->SET path/NONE-ELEM (path/termval *kid)] $$swing-sessions))))
+                    (rama/local-transform> [(path/keypath *swing) path/NIL->SET path/NONE-ELEM (path/termval *kid)] $$swing-sessions)))
+
+  ;; Usually, path/view cannot be called with code defined outside the module.
+  ;; This is by design, for security.
+  ;; With this utility, we relax that a bit, and make it possible to write a one-line `contains?` check.
+  ;; `view-with-arg` is defined in the module and so can be called by path/view. This wrapper will allow
+  ;; us to use a function and argument defined elsewhere to check the value from a pstate.
+  (defn view-with-arg [view-fn arg]
+    (fn [v] (view-fn v arg))))
 
 (test/deftest test-swingset []
   (with-open [ipc (rtest/create-ipc)]
     (rtest/launch-module! ipc SwingsetsModule {:tasks 4 :threads 2})
     (let [module-name (rama/get-module-name SwingsetsModule)
           sessions-depot (rama/foreign-depot ipc module-name "*sessions")
-          used-swing? (rama/foreign-query ipc module-name "kid-used-swing?")]
+
+          swing-sessions (rama/foreign-pstate ipc module-name "$$swing-sessions")]
 
       (rama/foreign-append! sessions-depot (->Session 1 10))
       (rama/foreign-append! sessions-depot (->Session 1 11))
       (rama/foreign-append! sessions-depot (->Session 2 10))
 
-      (test/is (= true (rama/foreign-invoke-query used-swing? 1 10)))
-      (test/is (= false (rama/foreign-invoke-query used-swing? 1 12)))
-      (test/is (= true (rama/foreign-invoke-query used-swing? 2 10)))
-      (test/is (= false (rama/foreign-invoke-query used-swing? 2 13)))
-      (test/is (= false (rama/foreign-invoke-query used-swing? 3 10))))))
+      ;; one-line contains check for a value in a set
+      (test/is (= true (rama/foreign-select-one [(path/keypath 10) (path/view (view-with-arg contains? 1))] swing-sessions)))
+      (test/is (= false (rama/foreign-select-one [(path/keypath 12) (path/view (view-with-arg contains? 1))] swing-sessions)))
+      (test/is (= true (rama/foreign-select-one [(path/keypath 10) (path/view (view-with-arg contains? 2))] swing-sessions)))
+      (test/is (= false (rama/foreign-select-one [(path/keypath 13) (path/view (view-with-arg contains? 2))] swing-sessions)))
+      (test/is (= false (rama/foreign-select-one [(path/keypath 10) (path/view (view-with-arg contains? 3))] swing-sessions))))))
 
 (comment
   (test-swingset))

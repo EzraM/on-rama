@@ -397,30 +397,22 @@ This is what the navigators do:
 
 So now we have a set that should have a value in it. The next question becomes, how do we check that the value is actually there? How do we check if a value is contained in a set?
 
-We can use a query that looks like this:
+There's a navigator called `view` which pulls the current path selection into a value and passes that value as input to the function passed to view. We are eventually going to navigate to a set from our pstate, and using `view`, pass that set to a Clojure core `contains?` check, to see if an element is in there. But, we can't write that flow directly. This ability to pull any value out of a pstate and do what you want with it is powerful. So, for security reasons, Rama does not allow `view` to directly accept code defined outside of the module boundary. We can relax this protection a little by writing a wrapper function. Our wrapper will live inside the module, meaning it can be passed to a view check, and it will unlock calling view with a single-arity function defined outside.
 
 ```clojure
-(<<query-topology topologies "kid-used-swing?"
-                  ;; queries take inputs and emit results.
-                  [*kid *swing :> *used-swing?]
-                  ;; this data is partitioned by the swing, so we go to the partition
-                  ;; of the swing we are interested in.
-                  (|hash *swing)
-                  ;; this is an anonymous function that will be called as part of the path.
-                  ;; the argument to the function is the set of kids who used the swing, pulled from the pstate.
-                  (<<ramafn %had-kid [*kids]
-                            ;; we use the baked-in contains? function from Clojure to check
-                            ;; if the kid we're interested in is in this set, and emit the answer.
-                            (:> (contains? *kids *kid)))
-                  ;; this path resolves with a view that a emits of a boolean of whether or not a kid used the swing.
-                  (local-select> [(path/keypath *swing) (path/view %had-kid)] $$swing-sessions :> *used-swing?)
-                  ;; all queries must, as their last operation, relocate to the partition where the query started.
-                  (|origin))
+(defmodule MyModule [setup topologies]
+  (defn view-with-arg [view-fn arg]
+    (fn [v] (view-fn v arg)))
+)
 ```
 
-The `view` function is interesting. It pulls values from a pstate based on the current path selection, and passes those values as an input to a `ramafn`. I think of `ramafn` as a portal out of Dataflow-land into normal Clojure. Here, we have navigated our selection to a set. Our ramafn has that set as an input. And, we can call the built-in Clojure function `contains?` on the set as a check.
+With our utility in place, from outside the module, we can check for a value in a set using `contains?`.
 
-It took me awhile to get simple operations on sets working in Rama. I was expecting reading from a set and writing to set to be one-liners, or maybe nearly so. Instead, there's a lot more going on, but once you see the pattern, the different parts do fit together.
+```clojure
+(rama/foreign-select-one [(path/keypath 10) (path/view (view-with-arg contains? 1))] swing-sessions)
+```
+
+It took me awhile to get simple operations on sets working in Rama. The learning curve is similar to learning a new language. But, as you become more familiar with the patterns, the different parts do fit together.
 
 ## One path to buy-in on an existing application
 
